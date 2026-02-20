@@ -7,9 +7,7 @@
         const $container = $(this);
         const pdfUrl = $container.data('pdf-url');
 
-        if (!pdfUrl) {
-          return;
-        }
+        if (!pdfUrl) return;
 
         const pdfjsLib = window['pdfjs-dist/build/pdf'] || window.pdfjsLib;
 
@@ -23,9 +21,7 @@
 
         // 1. Inject DOM Structure
         const $overlay = $('<div class="acuity-flipbook-overlay"><div class="acuity-flipbook-spinner"></div><div>Rendering PDF...</div></div>').appendTo($container);
-
         const $viewport = $('<div class="acuity-flipbook-viewport"></div>').appendTo($container);
-
         const $controls = $(`
           <div class="acuity-flipbook-controls">
             <button type="button" class="acuity-btn fullscreen" title="Fullscreen">&#x26F6;</button>
@@ -81,61 +77,95 @@
 
           pageFlip.loadFromHTML(pagesArray);
 
-          // 2. Wire up the Page Counter
+          // 2. Interaction Zone & Drag-to-Pan (Bulletproof Version)
+const $scrollProtect = $('<div class="acuity-scroll-protect" title="Click and drag to pan"></div>').appendTo($flipbookInner);
+
+          // CRITICAL FIX: Only block the initial click/touch from reaching the 3D engine.
+          // We MUST let 'mousemove' and 'touchmove' bubble up so the document can track the drag!
+          $scrollProtect.on('mousedown touchstart pointerdown', function(e) {
+            e.stopPropagation();
+          });
+
+          $scrollProtect.on('mousedown touchstart', function(e) {
+            // Ignore right clicks
+            if (e.type === 'mousedown' && e.which !== 1) return;
+            e.preventDefault(); // Stop native drag-and-drop ghosting
+
+            const isTouch = e.type === 'touchstart';
+            const startEvent = isTouch ? e.originalEvent.touches[0] : e;
+
+            const startX = startEvent.clientX;
+            const startY = startEvent.clientY;
+            const scrollLeft = $viewport.scrollLeft();
+            const scrollTop = $viewport.scrollTop();
+
+            $scrollProtect.css('cursor', 'grabbing');
+
+            // Namespace the events so they don't leak or conflict with other modules
+            const moveEvent = isTouch ? 'touchmove.acuityPan' : 'mousemove.acuityPan';
+            const upEvent = isTouch ? 'touchend.acuityPan touchcancel.acuityPan' : 'mouseup.acuityPan';
+
+            $(document).on(moveEvent, function(moveE) {
+              const moveTouch = isTouch ? moveE.originalEvent.touches[0] : moveE;
+              $viewport.scrollLeft(scrollLeft - (moveTouch.clientX - startX));
+              $viewport.scrollTop(scrollTop - (moveTouch.clientY - startY));
+            });
+
+            $(document).on(upEvent, function() {
+              $scrollProtect.css('cursor', 'grab');
+              $(document).off('.acuityPan'); // Clean up listeners instantly
+            });
+          });
+
+          // 3. Wire up UI Controls
           const $pageCounter = $controls.find('.acuity-page-counter');
           $pageCounter.text(`1 / ${numPages}`);
 
           pageFlip.on('flip', (e) => {
-            // e.data returns the current left-most page index (0-based)
             const currentPage = e.data + 1;
             $pageCounter.text(`${currentPage} / ${numPages}`);
           });
 
-          // 3. Wire up Controls
           $controls.find('.prev').on('click', () => pageFlip.flipPrev());
           $controls.find('.next').on('click', () => pageFlip.flipNext());
 
           let currentZoom = 1;
           const applyZoom = () => {
             if (currentZoom > 1) {
-              // 1. Lock the outer container height so the page doesn't stretch downwards
-              if (currentZoom === 1.4) { // Only lock it on the first zoom step
+              // Safely lock height explicitely on the first zoom step to force internal scrollbars
+              if (!$container.attr('data-height-locked')) {
                 $container.css('height', $container.height() + 'px');
+                $container.attr('data-height-locked', 'true');
               }
 
-              // 2. Kill the flexbox centering so standard 2D scrolling can activate
               $viewport.css({
                 'display': 'block',
-                'padding': '20px' // Add breathing room around the edges
+                'padding': '20px'
               });
 
-              // 3. Scale from the top-left corner so we don't bleed into negative scroll space
               $flipbookInner.css({
                 'transform': `scale(${currentZoom})`,
                 'transform-origin': 'top left',
                 'transition': 'transform 0.3s ease'
               });
 
-              // 4. Calculate the mathematical overflow and add it as margins
-              // to force the browser's native scrollbars to appear
               const baseWidth = $flipbookInner.width();
               const baseHeight = $flipbookInner.height();
               const extraWidth = (baseWidth * currentZoom) - baseWidth;
               const extraHeight = (baseHeight * currentZoom) - baseHeight;
 
               $flipbookInner.css({
+                'margin': '0',
                 'margin-right': `${extraWidth + 40}px`,
-                'margin-bottom': `${extraHeight + 100}px` // +100px so the control bar doesn't cover text
+                'margin-bottom': `${extraHeight + 100}px`
               });
-
             } else {
-              // Reset everything back to the sleek, centered theatrical view
-              $container.css('height', ''); // Release the height lock
+              // Reset back to standard view
+              $container.css('height', '');
+              $container.removeAttr('data-height-locked');
 
               $viewport.css({
                 'display': 'flex',
-                'align-items': 'center',
-                'justify-content': 'center',
                 'padding': '0'
               });
 
@@ -143,22 +173,25 @@
                 'transform': `scale(1)`,
                 'transform-origin': 'center center',
                 'transition': 'transform 0.3s ease',
+                'margin': 'auto',
                 'margin-right': '0',
                 'margin-bottom': '0'
               });
             }
           };
+
+          // Use toFixed to eliminate trailing floating point errors
           $controls.find('.zoom-in').on('click', () => {
-            currentZoom += 0.4;
+            currentZoom = parseFloat((currentZoom + 0.4).toFixed(1));
             applyZoom();
           });
 
           $controls.find('.zoom-out').on('click', () => {
-            currentZoom = Math.max(1, currentZoom - 0.4);
+            currentZoom = Math.max(1, parseFloat((currentZoom - 0.4).toFixed(1)));
             applyZoom();
           });
 
-          // 4. Wire up Fullscreen API
+          // 4. Fullscreen & Resizing
           const toggleFullscreen = () => {
             if (!document.fullscreenElement) {
               $container[0].requestFullscreen().catch(err => {
@@ -171,7 +204,6 @@
 
           $controls.find('.fullscreen').on('click', toggleFullscreen);
 
-          // Listen for escape key or standard fullscreen exits to toggle the UI
           document.addEventListener('fullscreenchange', () => {
             if (document.fullscreenElement) {
               $container.addClass('is-fullscreen');
@@ -179,33 +211,24 @@
             } else {
               $container.removeClass('is-fullscreen');
               $controls.find('.fullscreen').html('&#x26F6;').attr('title', 'Fullscreen');
-
-              // Optional: Reset zoom when exiting fullscreen
               currentZoom = 1;
               applyZoom();
             }
           });
 
-          // 4.5 Handle Window Resize & Device Orientation
           let resizeTimer;
           $(window).on('resize', () => {
             clearTimeout(resizeTimer);
             resizeTimer = setTimeout(() => {
-
-              // 1. Force the 3D physics engine to recalculate its dimensions to fit the new layout
               pageFlip.update();
-
-              // 2. If the user resizes or rotates the device while heavily zoomed in,
-              // the offset math breaks. We safely snap it back to the 1x theatrical view.
               if (currentZoom !== 1) {
                 currentZoom = 1;
                 applyZoom();
               }
-
-            }, 250); // 250ms debounce ensures performance stays buttery smooth
+            }, 250);
           });
 
-          // 5. Reveal UI
+          // 5. Reveal UI Safely
           $flipbookInner.addClass('is-ready');
           $controls.addClass('is-ready');
 
