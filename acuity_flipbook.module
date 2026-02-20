@@ -1,0 +1,141 @@
+<?php
+
+/**
+ * @file
+ * Provides a field formatter to display PDFs as interactive flipbooks.
+ */
+
+/**
+ * Implements hook_field_formatter_info().
+ */
+function acuity_flipbook_field_formatter_info(): array {
+  return [
+    'acuity_flipbook_pdf' => [
+      'label' => t('Acuity 3D Flipbook (PDF)'),
+      'field types' => ['file'],
+      'description' => t('Displays a single PDF file as an interactive 3D flipbook.'),
+      'settings' => [
+        'width' => 500,
+        'height' => 700,
+      ],
+    ],
+  ];
+}
+
+/**
+ * Implements hook_field_formatter_view().
+ */
+function acuity_flipbook_field_formatter_view($entity_type, $entity, array $field, array $instance, $langcode, array $items, array $display): array {
+  $element = [];
+
+  if ($display['type'] === 'acuity_flipbook_pdf') {
+    $settings = $display['settings'];
+
+    foreach ($items as $delta => $item) {
+      if (strpos($item['filemime'], 'pdf') === FALSE) {
+        continue;
+      }
+
+      $file_url = file_create_url($item['uri']);
+
+      $element[$delta] = [
+        '#type' => 'markup',
+        '#markup' => sprintf(
+          '<div class="acuity-flipbook-container" data-pdf-url="%s" data-width="%d" data-height="%d"></div>',
+          check_url($file_url),
+          (int) $settings['width'],
+          (int) $settings['height']
+        ),
+        '#attached' => [
+          'library' => [
+            // We now strictly load our own standalone library bundle
+            ['acuity_flipbook', 'pageflip_init'],
+          ],
+        ],
+      ];
+    }
+  }
+
+  return $element;
+}
+
+/**
+ * Implements hook_library_info().
+ */
+function acuity_flipbook_library_info(): array {
+  $libraries['pdfjs_engine'] = [
+    'title' => 'PDF.js Engine (CDN)',
+    'version' => '3.11.174',
+    'js' => [
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js' => ['type' => 'external'],
+    ],
+  ];
+
+  $libraries['pageflip_init'] = [
+    'title' => 'Acuity PageFlip Integration',
+    'version' => '1.0',
+    'js' => [
+      // Switch the physics engine to the reliable CDN
+      'https://cdn.jsdelivr.net/npm/page-flip/dist/js/page-flip.browser.js' => ['type' => 'external'],
+      backdrop_get_path('module', 'acuity_flipbook') . '/js/acuity_flipbook.init.js' => [],
+    ],
+    'css' => [
+      backdrop_get_path('module', 'acuity_flipbook') . '/css/acuity_flipbook.css' => [],
+    ],
+    'dependencies' => [
+      ['system', 'jquery'],
+      ['acuity_flipbook', 'pdfjs_engine'],
+    ],
+  ];
+
+  return $libraries;
+}
+
+/**
+ * Implements hook_field_formatter_settings_form().
+ */
+function acuity_flipbook_field_formatter_settings_form(array $field, array $instance, string $view_mode, array $form, array &$form_state): array {
+  $display = $instance['display'][$view_mode];
+  $settings = $display['settings'];
+  $element = [];
+
+  if ($display['type'] === 'acuity_flipbook_pdf') {
+    $element['width'] = [
+      '#type' => 'number',
+      '#title' => t('Base Page Width'),
+      '#description' => t('The base width of a single flipbook page in pixels.'),
+      '#default_value' => $settings['width'],
+      '#required' => TRUE,
+      '#min' => 100,
+    ];
+
+    $element['height'] = [
+      '#type' => 'number',
+      '#title' => t('Base Page Height'),
+      '#description' => t('The base height of a single flipbook page in pixels.'),
+      '#default_value' => $settings['height'],
+      '#required' => TRUE,
+      '#min' => 100,
+    ];
+  }
+
+  return $element;
+}
+
+/**
+ * Implements hook_field_formatter_settings_summary().
+ */
+function acuity_flipbook_field_formatter_settings_summary(array $field, array $instance, string $view_mode): string {
+  $display = $instance['display'][$view_mode];
+  $settings = $display['settings'];
+  $summary = '';
+
+  if ($display['type'] === 'acuity_flipbook_pdf') {
+    $summary = t('Flipbook dimensions: @widthpx by @heightpx', [
+      '@width' => $settings['width'],
+      '@height' => $settings['height'],
+    ]);
+  }
+
+  return $summary;
+}

@@ -1,0 +1,6 @@
+name = Acuity Flipbook
+description = Provides an interactive 3D flipbook field formatter for PDF files.
+backdrop = 1.x
+type = module
+package = Acuity
+dependencies[] = file

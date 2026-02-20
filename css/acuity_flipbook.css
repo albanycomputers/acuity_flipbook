@@ -1,0 +1,162 @@
+/**
+ * @file
+ * Styling for the Acuity 3D Flipbook formatter.
+ */
+
+/* --- 1. Layout Structure --- */
+.acuity-flipbook-container {
+  position: relative;
+  width: 100%;
+  min-height: 500px;
+  margin: 2rem auto;
+  overflow: hidden;
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  transition: background-color 0.3s ease;
+}
+
+/* When the browser enters fullscreen mode */
+.acuity-flipbook-container.is-fullscreen {
+  margin: 0;
+  border-radius: 0;
+  background-color: #222; /* Dark theatrical background */
+  height: 100vh;
+  max-height: none;
+}
+
+.acuity-flipbook-viewport {
+  width: 100%;
+  height: 100%;
+  min-height: 500px;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* --- 2. The Physics Wrapper --- */
+.acuity-flipbook-wrapper {
+  position: absolute;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.acuity-flipbook-wrapper.is-ready {
+  position: relative;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 0.5s ease;
+}
+
+/* --- 3. The Individual Pages --- */
+.acuity-flip-page {
+  background-color: #ffffff;
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  transform: translateZ(0);
+}
+
+.acuity-flip-page canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+
+/* --- 4. Control Bar --- */
+.acuity-flipbook-controls {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background-color: rgba(30, 30, 30, 0.85);
+  padding: 8px 16px;
+  border-radius: 50px;
+  z-index: 100;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.5s ease;
+  white-space: nowrap;
+}
+
+.acuity-flipbook-controls.is-ready {
+  opacity: 1;
+  visibility: visible;
+}
+
+.acuity-btn {
+  background: none;
+  border: none;
+  color: #ffffff;
+  font-size: 1.2rem;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.acuity-btn:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.acuity-page-counter {
+  color: #cccccc;
+  font-family: sans-serif;
+  font-size: 0.9rem;
+  padding: 0 8px;
+  user-select: none;
+}
+
+/* --- 5. States & Overlays --- */
+.acuity-flipbook-container .error {
+  color: #d32f2f;
+  background: #ffebee;
+  padding: 1rem;
+  border: 1px solid #ffcdd2;
+  border-radius: 4px;
+  text-align: center;
+  width: 100%;
+  z-index: 100;
+}
+
+.acuity-flipbook-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #ffffff;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  font-family: sans-serif;
+  font-size: 0.9rem;
+}
+
+.acuity-flipbook-spinner {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #3498db;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: acuity-spin 1s linear infinite;
+  margin-bottom: 12px;
+}
+
+@keyframes acuity-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
