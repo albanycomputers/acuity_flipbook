@@ -1,4 +1,5 @@
-# Flipbook (Acuity Utils)
+# PDF Flipbook (Acuity Utils)
+
 **FlipBook (Acuity Utils)** A high-performance, client-side 3D PDF viewer and field formatter.
 
 Acuity Flipbook is a standalone utility module that transforms standard Backdrop CMS file fields into interactive, hardware-accelerated 3D flipbooks. Instead of relying on heavy server-side image generation (like ImageMagick or Ghostscript) that bloats your server, this module pushes the processing to the browser. It natively extracts vector PDF data and wraps it in a responsive 3D physics engine for a premium reading experience.
