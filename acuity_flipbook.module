@@ -13,11 +13,7 @@ function acuity_flipbook_field_formatter_info(): array {
     'acuity_flipbook_pdf' => [
       'label' => t('Acuity 3D Flipbook (PDF)'),
       'field types' => ['file'],
-      'description' => t('Displays a single PDF file as an interactive 3D flipbook.'),
-      'settings' => [
-        'width' => 500,
-        'height' => 700,
-      ],
+      'description' => t('Displays each PDF file as an interactive 3D flipbook.'),
     ],
   ];
 }
@@ -29,8 +25,6 @@ function acuity_flipbook_field_formatter_view($entity_type, $entity, array $fiel
   $element = [];
 
   if ($display['type'] === 'acuity_flipbook_pdf') {
-    $settings = $display['settings'];
-
     foreach ($items as $delta => $item) {
       if (strpos($item['filemime'], 'pdf') === FALSE) {
         continue;
@@ -40,11 +34,10 @@ function acuity_flipbook_field_formatter_view($entity_type, $entity, array $fiel
 
       $element[$delta] = [
         '#type' => 'markup',
+        // The book sizes itself from the PDF and the space it is placed in.
         '#markup' => sprintf(
-          '<div class="acuity-flipbook-container" data-pdf-url="%s" data-width="%d" data-height="%d"></div>',
-          check_url($file_url),
-          (int) $settings['width'],
-          (int) $settings['height']
+          '<div class="acuity-flipbook-container" data-pdf-url="%s"></div>',
+          check_url($file_url)
         ),
         '#attached' => [
           'library' => [
@@ -63,20 +56,16 @@ function acuity_flipbook_field_formatter_view($entity_type, $entity, array $fiel
  * Implements hook_library_info().
  */
 function acuity_flipbook_library_info(): array {
-  $libraries['pdfjs_engine'] = [
-    'title' => 'PDF.js Engine (CDN)',
-    'version' => '3.11.174',
-    'js' => [
-      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js' => ['type' => 'external'],
-    ],
-  ];
-
+  // PDF.js (6.4.299) is not declared here: it is an ES module, imported by
+  // acuity_flipbook.init.js itself.
   $libraries['pageflip_init'] = [
     'title' => 'Acuity PageFlip Integration',
-    'version' => '1.0',
+    // NULL: core then stamps the site's cache-busting query string, so an
+    // edited init.js reaches browsers on the next cache flush.
+    'version' => NULL,
     'js' => [
-      // Switch the physics engine to the reliable CDN
-      'https://cdn.jsdelivr.net/npm/page-flip/dist/js/page-flip.browser.js' => ['type' => 'external'],
+      // Pinned: unversioned, any upstream release would change the module.
+      'https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js' => ['type' => 'external'],
       backdrop_get_path('module', 'acuity_flipbook') . '/js/acuity_flipbook.init.js' => [],
     ],
     'css' => [
@@ -84,58 +73,8 @@ function acuity_flipbook_library_info(): array {
     ],
     'dependencies' => [
       ['system', 'jquery'],
-      ['acuity_flipbook', 'pdfjs_engine'],
     ],
   ];
 
   return $libraries;
-}
-
-/**
- * Implements hook_field_formatter_settings_form().
- */
-function acuity_flipbook_field_formatter_settings_form(array $field, array $instance, string $view_mode, array $form, array &$form_state): array {
-  $display = $instance['display'][$view_mode];
-  $settings = $display['settings'];
-  $element = [];
-
-  if ($display['type'] === 'acuity_flipbook_pdf') {
-    $element['width'] = [
-      '#type' => 'number',
-      '#title' => t('Base Page Width'),
-      '#description' => t('The base width of a single flipbook page in pixels.'),
-      '#default_value' => $settings['width'],
-      '#required' => TRUE,
-      '#min' => 100,
-    ];
-
-    $element['height'] = [
-      '#type' => 'number',
-      '#title' => t('Base Page Height'),
-      '#description' => t('The base height of a single flipbook page in pixels.'),
-      '#default_value' => $settings['height'],
-      '#required' => TRUE,
-      '#min' => 100,
-    ];
-  }
-
-  return $element;
-}
-
-/**
- * Implements hook_field_formatter_settings_summary().
- */
-function acuity_flipbook_field_formatter_settings_summary(array $field, array $instance, string $view_mode): string {
-  $display = $instance['display'][$view_mode];
-  $settings = $display['settings'];
-  $summary = '';
-
-  if ($display['type'] === 'acuity_flipbook_pdf') {
-    $summary = t('Flipbook dimensions: @widthpx by @heightpx', [
-      '@width' => $settings['width'],
-      '@height' => $settings['height'],
-    ]);
-  }
-
-  return $summary;
 }

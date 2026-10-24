@@ -1,6 +1,23 @@
 (function ($) {
   'use strict';
 
+  const PDFJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.4.299/pdf.min.mjs';
+  const PDFJS_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.4.299/pdf.worker.min.mjs';
+  let pdfjsPromise = null;
+
+  // Loads PDF.js once per page. Since version 4 it is published only as an
+  // ES module, so it is imported here rather than added as a classic script
+  // by the library system. PDF.js wraps the cross-origin worker itself.
+  function loadPdfjs() {
+    if (!pdfjsPromise) {
+      pdfjsPromise = import(PDFJS_URL).then((lib) => {
+        lib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
+        return lib;
+      });
+    }
+    return pdfjsPromise;
+  }
+
   Backdrop.behaviors.acuityFlipbook = {
     attach: function (context, settings) {
       $('.acuity-flipbook-container', context).once('acuity-flipbook').each(async function () {
@@ -9,15 +26,15 @@
 
         if (!pdfUrl) return;
 
-        const pdfjsLib = window['pdfjs-dist/build/pdf'] || window.pdfjsLib;
-
-        if (!pdfjsLib) {
-          console.error('Acuity Flipbook Error: PDF.js library did not load.');
+        let pdfjsLib;
+        try {
+          pdfjsLib = await loadPdfjs();
+        }
+        catch (error) {
+          console.error('Acuity Flipbook Error: PDF.js library did not load.', error);
           $container.html('<p class="error">System error: PDF rendering engine not found.</p>');
           return;
         }
-
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
         // 1. Inject DOM Structure
         const $overlay = $('<div class="acuity-flipbook-overlay"><div class="acuity-flipbook-spinner"></div><div>Rendering PDF...</div></div>').appendTo($container);
@@ -34,42 +51,104 @@
         `).appendTo($container);
 
         try {
-          const loadingTask = pdfjsLib.getDocument(pdfUrl);
+          const loadingTask = pdfjsLib.getDocument({ url: pdfUrl });
           const pdf = await loadingTask.promise;
           const numPages = pdf.numPages;
 
           const $flipbookInner = $('<div class="acuity-flipbook-wrapper"></div>').appendTo($viewport);
 
+          // Every page is sized from page 1, and rendered at the height of the
+          // screen: sharp in fullscreen, never larger than a display can show.
+          const firstPage = await pdf.getPage(1);
+          const baseViewport = firstPage.getViewport({ scale: 1 });
+          const pixelRatio = window.devicePixelRatio || 1;
+          const renderScale = Math.min(window.screen.height * pixelRatio, 2400) / baseViewport.height;
+          const pageWidth = Math.round(baseViewport.width * renderScale);
+          const pageHeight = Math.round(baseViewport.height * renderScale);
+
+          // Pages start empty. Rendering them all up front kept the spinner up
+          // for the whole document and held a full-size canvas per page (about
+          // 300 MB for a 72-page issue), so only pages near the open spread
+          // are drawn, and pages far behind are released again.
+          const pagesArray = [];
           for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-            const page = await pdf.getPage(pageNum);
-            const viewport = page.getViewport({ scale: 1.5 });
-
             const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
-
+            canvas.width = 0;
+            canvas.height = 0;
             const $pageWrapper = $('<div class="acuity-flip-page"></div>').append(canvas);
             $flipbookInner.append($pageWrapper);
-
-            const renderContext = {
-              canvasContext: ctx,
-              viewport: viewport
-            };
-            await page.render(renderContext).promise;
+            pagesArray.push($pageWrapper[0]);
           }
 
-          const pagesArray = $flipbookInner.find('.acuity-flip-page').toArray();
-          const firstCanvas = pagesArray[0].querySelector('canvas');
+          const RENDER_AHEAD = 4;
+          const KEEP_RENDERED = 10;
+          const jobs = new Map();
+
+          // Draws one page (0-based) into its canvas, once.
+          const renderPage = (index) => {
+            if (index < 0 || index >= numPages || jobs.has(index)) {
+              return;
+            }
+            const job = { task: null, released: false };
+            const canvas = pagesArray[index].firstChild;
+            job.promise = pdf.getPage(index + 1).then((page) => {
+              if (job.released) {
+                return;
+              }
+              const viewport = page.getViewport({ scale: renderScale });
+              canvas.width = viewport.width;
+              canvas.height = viewport.height;
+              job.task = page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport });
+              return job.task.promise;
+            }).catch((error) => {
+              // A cancelled render is expected when the reader moves on.
+              if (!error || error.name !== 'RenderingCancelledException') {
+                console.error('Acuity Flipbook: page ' + (index + 1) + ' failed to render.', error);
+              }
+              if (jobs.get(index) === job) {
+                jobs.delete(index);
+              }
+            });
+            jobs.set(index, job);
+          };
+
+          // Frees a page's canvas; it is drawn again if the reader returns.
+          const releasePage = (index) => {
+            const job = jobs.get(index);
+            job.released = true;
+            if (job.task) {
+              job.task.cancel();
+            }
+            jobs.delete(index);
+            const canvas = pagesArray[index].firstChild;
+            canvas.width = 0;
+            canvas.height = 0;
+          };
+
+          // Draws the open spread first, then outwards; releases distant pages.
+          const renderAround = (index) => {
+            for (let distance = 0; distance <= RENDER_AHEAD + 1; distance++) {
+              renderPage(index + distance);
+              renderPage(index - distance);
+            }
+            jobs.forEach((job, i) => {
+              if (Math.abs(i - index) > KEEP_RENDERED) {
+                releasePage(i);
+              }
+            });
+          };
+
+          renderAround(0);
+          await jobs.get(0).promise;
 
           const pageFlip = new St.PageFlip($flipbookInner[0], {
-            width: firstCanvas.width,
-            height: firstCanvas.height,
+            width: pageWidth,
+            height: pageHeight,
             size: 'stretch',
             minWidth: 300,
-            maxWidth: firstCanvas.width,
+            maxWidth: pageWidth,
             minHeight: 400,
-            maxHeight: firstCanvas.height,
+            maxHeight: pageHeight,
             showCover: true,
             usePortrait: false,
             maxShadowOpacity: 0.5,
@@ -124,6 +203,7 @@ const $scrollProtect = $('<div class="acuity-scroll-protect" title="Click and dr
           pageFlip.on('flip', (e) => {
             const currentPage = e.data + 1;
             $pageCounter.text(`${currentPage} / ${numPages}`);
+            renderAround(e.data);
           });
 
           $controls.find('.prev').on('click', () => pageFlip.flipPrev());

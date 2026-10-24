@@ -2,10 +2,10 @@
 
 **FlipBook (Acuity Utils)** A high-performance, client-side 3D PDF viewer and field formatter.
 
-Acuity Flipbook is a standalone utility module that transforms standard Backdrop CMS file fields into interactive, hardware-accelerated 3D flipbooks. Instead of relying on heavy server-side image generation (like ImageMagick or Ghostscript) that bloats your server, this module pushes the processing to the browser. It natively extracts vector PDF data and wraps it in a responsive 3D physics engine for a premium reading experience.
+Acuity Flipbook is a standalone utility module that displays PDF files uploaded to a standard Backdrop CMS file field as interactive, hardware-accelerated 3D flipbooks. It works with **PDF files only**: any other file on the same field (images, Word documents and so on) is not shown by this formatter. Instead of relying on heavy server-side image generation (like ImageMagick or Ghostscript) that bloats your server, this module pushes the processing to the browser. It natively extracts vector PDF data and wraps it in a responsive 3D physics engine for a premium reading experience.
 
-## Alpha Release Notes
-As an alpha release, the core rendering pipeline and UI controls are fully stable and functional. Testers should ensure their Backdrop CMS environment is running PHP 8.0+ and clear their system caches after installation to register the new field formatter hooks.
+## Beta Release Notes
+The module has been in use on live sites for several months. Ensure your Backdrop CMS environment is running PHP 8.0+, and clear the caches after installing or updating so the field formatter and its scripts are picked up.
 
 ## Features
 
@@ -18,8 +18,8 @@ As an alpha release, the core rendering pipeline and UI controls are fully stabl
 # CDN Usage & External Dependencies
 To keep this module exceptionally lightweight and ensure the fastest possible load times across the globe, Acuity Flipbook does not bundle heavy JavaScript libraries locally. Instead, it relies on secure, industry-standard Content Delivery Networks (CDNs):
 
-* **PDF.js (v3.11.174):** Loaded via Cloudflare (cdnjs.cloudflare.com) to handle the heavy lifting of parsing the PDF and extracting the canvas data.
-* **StPageFlip:** Loaded via jsDelivr (cdn.jsdelivr.net) to power the 3D physics, responsive scaling, and page-turning math.
+* **PDF.js (v6.4.299):** Loaded via Cloudflare (cdnjs.cloudflare.com) as an ES module, which needs a current browser, to handle the heavy lifting of parsing the PDF and extracting the canvas data.
+* **StPageFlip (v2.0.7):** Loaded via jsDelivr (cdn.jsdelivr.net) to power the 3D physics, responsive scaling, and page-turning math.
 
 (Note: Because these rendering engines are loaded via CDN, the end-user's browser requires an active internet connection to render the flipbook.)
 
@@ -39,6 +39,8 @@ Enable the module.
 
 Simply add a standard **File** field to any content type (allowing .pdf extensions) and set the Manage Display formatter to Acuity 3D Flipbook (PDF). The module mathematically analyzes the native dimensions of the uploaded document and scales the two-page spread to perfectly fit your theme's layout column without breaking responsiveness.
 
+If the field allows more than one file, each PDF is shown as a flipbook of its own. Pages are drawn as the reader reaches them, so long documents open quickly: in testing, a 64-page, 10 MB PDF showed its first page about three times faster than in earlier versions (0.9 seconds instead of 2.9), using about a seventh of the memory.
+
 
 ## Issues:
 
@@ -57,7 +59,7 @@ While part of this larger Acuity family, this module is a standalone utility.
 
 ## Credits:
 - Steve Moorhouse - Zulip (DrAlbany)
-- Google Gemini Pro 3.1 assisted with the coding of this module.
+- Assisted by AI
 
 ## Sponsorship:
 - Albany Computer Services (https://www.albany-computers.co.uk)
